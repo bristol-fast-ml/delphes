@@ -78,6 +78,7 @@
 #include "modules/ParticleDensity.h"
 #include "modules/TruthVertexFinder.h"
 #include "modules/ExampleModule.h"
+#include "modules/ImageProducer.h"
 
 #ifdef __CINT__
 
@@ -138,5 +139,6 @@
 #pragma link C++ class ParticleDensity+;
 #pragma link C++ class TruthVertexFinder+;
 #pragma link C++ class ExampleModule+;
+#pragma link C++ class ImageProducer+;
 
 #endif
