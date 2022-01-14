@@ -16,6 +16,7 @@
 #include "TDatabasePDG.h"
 #include "TLorentzVector.h"
 #include "TH2D.h"
+#include "TFile.h"
 
 #include <algorithm> 
 #include <stdexcept>
@@ -57,6 +58,9 @@ void ImageProducer::Init()
   fInputArray = ImportArray(GetString("InputArray", ""));
   fItInputArray = fInputArray->MakeIterator();
 
+  // create output directory
+  file = new TFile("ImageFile.root", "RECREATE");
+
 }
 
 //------------------------------------------------------------------------------
@@ -64,6 +68,10 @@ void ImageProducer::Init()
 void ImageProducer::Finish()
 {
   if(fItInputArray) delete fItInputArray;
+
+  file->Close();
+  if(file) delete file;
+
 }
 
 //------------------------------------------------------------------------------
@@ -72,6 +80,7 @@ void ImageProducer::Process()
 {
 
   // create histogram
+  file->cd();
   const char* title = std::to_string(ievt).c_str();
   TH2D* h2 = new TH2D(title, "img", nBinsEta, etaMin, etaMax, nBinsPhi, phiMin, phiMax);
 

@@ -54,6 +54,8 @@ set ExecutionPath {
 
   ScalarHT
 
+  ImageProducer
+
   TreeWriter
 }
 
@@ -769,6 +771,10 @@ module UniqueObjectFinder UniqueObjectFinder {
   add InputArray ElectronIsolation/electrons electrons
   add InputArray MuonIsolation/muons muons
   add InputArray JetEnergyScale/jets jets
+}
+
+module ImageProducer ImageProducer {
+    add InputArray EFlowMerger/eflow
 }
 
 ##################

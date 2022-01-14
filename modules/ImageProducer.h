@@ -5,6 +5,7 @@
 
 #include <deque>
 
+class TFile;
 class TObjArray;
 class DelphesFormula;
 
@@ -34,8 +35,10 @@ class ImageProducer: public DelphesModule
   TIterator *fItInputArray; //!
   const TObjArray *fInputArray; //!
 
+  TFile* file; // image output file
 
   ClassDef(ImageProducer, 1)
-    };
+
+};
 
 #endif
