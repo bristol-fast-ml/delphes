@@ -44,14 +44,13 @@ ImageProducer::~ImageProducer()
 
 void ImageProducer::Init()
 {
+  TString filename = GetString("filename", "Images.root");
 
-  nBinsEta = GetInt("NPixelEta", 20);
+  nBinsEta = GetInt("nPixelEta", 20);
   etaMin   = GetDouble("etaMin", -5.);
   etaMax   = GetDouble("etaMax", -5.);
 
-  nBinsPhi = GetInt("NPixelPhi", 12);
-  phiMin   = GetDouble("phiMin", -1*TMath::Pi());
-  phiMax   = GetDouble("phiMax", TMath::Pi());
+  nBinsPhi = GetInt("nPixelPhi", 12);
   
   // import input array(s)
 
@@ -59,7 +58,7 @@ void ImageProducer::Init()
   fItInputArray = fInputArray->MakeIterator();
 
   // create output directory
-  file = new TFile("ImageFile.root", "RECREATE");
+  file = new TFile(filename, "RECREATE");
 
 }
 
@@ -80,6 +79,9 @@ void ImageProducer::Process()
 {
 
   // create histogram
+  Double_t phiMin   = -1*TMath::Pi();
+  Double_t phiMax   = TMath::Pi();
+
   file->cd();
   const char* title = std::to_string(ievt).c_str();
   TH2D* h2 = new TH2D(title, "img", nBinsEta, etaMin, etaMax, nBinsPhi, phiMin, phiMax);

@@ -3,6 +3,8 @@
 
 #include "classes/DelphesModule.h"
 
+#include "TROOT.h"
+
 #include <deque>
 
 class TFile;
@@ -29,8 +31,8 @@ class ImageProducer: public DelphesModule
   Double_t etaMax;
 
   Int_t nBinsPhi;
-  Double_t phiMin;
-  Double_t phiMax;
+  //  Double_t phiMin;
+  //  Double_t phiMax;
 
   TIterator *fItInputArray; //!
   const TObjArray *fInputArray; //!

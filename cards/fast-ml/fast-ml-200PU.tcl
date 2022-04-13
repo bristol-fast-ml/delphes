@@ -6,6 +6,8 @@
 #
 #  Version: v04
 #
+#  Copied from CMS_PhaseII_200PU_v04.tcl
+#   addition of ImageProducers, Jim Brooke 2022
 #
 #######################################
 # Order of execution of various modules
@@ -122,12 +124,26 @@ set ExecutionPath {
   BTaggingPUPPITightMTD
   BTaggingPUPPIAK8
 
-  TauTagging
-  TauTaggingAK8
-  TauTaggingPUPPI
-  TauTaggingPUPPIAK8
+  TauTaggingCutBased
+  TauTaggingDNNMedium
+  TauTaggingDNNTight
 
-  TreeWriter
+  TauTaggingAK8CutBased
+  TauTaggingAK8DNNMedium
+  TauTaggingAK8DNNTight
+
+  TauTaggingPUPPICutBased
+  TauTaggingPUPPIDNNMedium
+  TauTaggingPUPPIDNNTight
+
+  TauTaggingPUPPIAK8CutBased
+  TauTaggingPUPPIAK8DNNMedium
+  TauTaggingPUPPIAK8DNNTight
+
+  ImageProducerGenParticle
+  ImageProducerCalo
+  ImageProducerPUPPI
+
 }
 
 
@@ -142,8 +158,7 @@ module PileUpMerger PileUpMerger {
   set VertexOutputArray vertices
 
   # pre-generated minbias input file
-  set PileUpFile /eos/cms/store/group/upgrade/delphes/PhaseII/MinBias_100k.pileup
-  #set PileUpFile MinBias.pileup
+  set PileUpFile /hdfs/user/ec6821/BristolFastML/MinBias/MinBias.pileup
   
   # average expected pile up
   set MeanPileUp 200
@@ -625,14 +640,14 @@ module SimpleCalorimeter HCal {
     add EtaPhiBins $eta $PhiBins
   }
 
-  # assume 0.02 x 0.02 resolution in eta,phi in the endcaps 1.5 < |eta| < 3.0 (HGCAL- HCAL)
+  # assume 0.07 x 0.07 resolution in eta,phi in the endcaps 1.5 < |eta| < 3.0 (HGCAL- HCAL)
 
   set PhiBins {}
   for {set i -45} {$i <= 45} {incr i} {
     add PhiBins [expr {$i * $pi/45.0}]
   }
 
-  # 0.02 unit in eta up to eta = 3
+  # 0.07 unit in eta up to eta = 3
   for {set i 1} {$i <= 21} {incr i} {
     set eta [expr { -2.958 + $i * 0.0696}]
     add EtaPhiBins $eta $PhiBins
@@ -724,9 +739,15 @@ module TrackPileUpSubtractor TrackPileUpSubtractor {
 
   set VertexInputArray PileUpMerger/vertices
   # assume perfect pile-up subtraction for tracks with |z| > fZVertexResolution
-  # Z vertex resolution in m
-  set ZVertexResolution {0.0001}
-}
+  # Z vertex resolution in m (naive guess from tkLayout, assumed flat in pt for now)
+  
+  set ZVertexResolution {
+  
+     (pt < 10. ) * ( ( -0.8*log10(pt) + 1. ) * (10^(0.5*abs(eta) + 1.5)) * 1e-06 ) +
+     (pt >= 10. ) * ( ( 0.2 ) * (10^(0.5*abs(eta) + 1.5)) * 1e-06 )
+     
+     }
+ }
 
 ########################
 # Reco PU filter
@@ -3984,7 +4005,7 @@ module BTagging BTaggingPUPPIAK8 {
 #############
 
 
-module TauTagging TauTagging {
+module TauTagging TauTaggingCutBased {
   set ParticleInputArray Delphes/allParticles
   set PartonInputArray Delphes/partons
   set JetInputArray JetEnergyScale/jets
@@ -3995,6 +4016,8 @@ module TauTagging TauTagging {
 
   set TauEtaMax 2.3
 
+  set BitNumber 0
+
   # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
 
   add EfficiencyFormula {0}  { (abs(eta) < 2.3) * ((( -0.00621816+0.00130097*pt-2.19642e-5*pt^2+1.49393e-7*pt^3-4.58972e-10*pt^4+5.27983e-13*pt^5 )) * (pt<250) + 0.0032*(pt>250)) + \
@@ -4005,7 +4028,213 @@ module TauTagging TauTagging {
                              }
 }
 
-module TauTagging TauTaggingAK8 {
+
+module TauTagging TauTaggingDNNMedium {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScale/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 1
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.011) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.007) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.021) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.010) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.006) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.026) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.018) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.012) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.008) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.004) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.028) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.020) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.014) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.009) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.031) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.025) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.018) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.013) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.009) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.009)
+                                 
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.643) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.800) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.846) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.877) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.928) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.940) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.953) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.953) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.634) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.795) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.837) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.876) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.910) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.929) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.973) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.973) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.625) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.777) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.821) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.857) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.869) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.864) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.838) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.838) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.653) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.793) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.829) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.871) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.876) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.869) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.856) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.856) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.638) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.754) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.791) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.846) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.860) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.850) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.778) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.778)
+                           }
+}
+
+module TauTagging TauTaggingDNNTight {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScale/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 2
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.002) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.002)
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.402) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.560) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.646) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.711) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.761) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.775) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.860) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.860) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.379) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.518) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.606) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.693) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.728) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.770) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.818) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.818) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.339) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.409) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.493) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.610) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.659) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.678) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.631) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.631) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.396) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.450) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.510) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.627) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.681) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.705) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.644) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.644) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.364) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.392) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.445) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.579) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.621) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.627) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.622) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.622)
+                           }
+}
+
+
+module TauTagging TauTaggingAK8CutBased {
   set ParticleInputArray Delphes/allParticles
   set PartonInputArray Delphes/partons
   set JetInputArray JetEnergyScaleAK8/jets
@@ -4016,6 +4245,8 @@ module TauTagging TauTaggingAK8 {
 
   set TauEtaMax 2.3
 
+  set BitNumber 0
+
   # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
 
   add EfficiencyFormula {0}  { (abs(eta) < 2.3) * ((( -0.00621816+0.00130097*pt-2.19642e-5*pt^2+1.49393e-7*pt^3-4.58972e-10*pt^4+5.27983e-13*pt^5 )) * (pt<250) + 0.0032*(pt>250)) + \
@@ -4026,7 +4257,218 @@ module TauTagging TauTaggingAK8 {
                              }
 }
 
-module TauTagging TauTaggingPUPPI {
+
+module TauTagging TauTaggingAK8DNNMedium {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScaleAK8/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 1
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.011) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.007) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.021) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.010) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.006) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.026) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.018) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.012) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.008) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.004) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.028) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.020) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.014) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.009) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.031) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.025) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.018) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.013) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.009) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.009)
+                                 
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.643) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.800) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.846) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.877) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.928) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.940) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.953) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.953) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.634) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.795) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.837) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.876) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.910) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.929) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.973) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.973) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.625) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.777) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.821) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.857) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.869) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.864) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.838) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.838) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.653) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.793) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.829) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.871) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.876) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.869) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.856) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.856) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.638) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.754) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.791) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.846) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.860) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.850) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.778) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.778)
+                           }
+
+
+
+}
+
+module TauTagging TauTaggingAK8DNNTight {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScaleAK8/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 2
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.002) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.002)
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.402) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.560) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.646) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.711) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.761) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.775) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.860) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.860) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.379) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.518) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.606) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.693) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.728) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.770) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.818) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.818) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.339) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.409) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.493) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.610) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.659) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.678) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.631) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.631) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.396) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.450) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.510) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.627) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.681) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.705) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.644) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.644) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.364) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.392) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.445) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.579) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.621) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.627) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.622) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.622)
+                           }
+}
+
+
+
+
+
+module TauTagging TauTaggingPUPPICutBased {
   set ParticleInputArray Delphes/allParticles
   set PartonInputArray Delphes/partons
   set JetInputArray JetEnergyScalePUPPI/jets
@@ -4037,6 +4479,8 @@ module TauTagging TauTaggingPUPPI {
 
   set TauEtaMax 2.3
 
+  set BitNumber 0
+
   # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
 
   add EfficiencyFormula {0}  { (abs(eta) < 2.3) * ((( -0.00621816+0.00130097*pt-2.19642e-5*pt^2+1.49393e-7*pt^3-4.58972e-10*pt^4+5.27983e-13*pt^5 )) * (pt<250) + 0.0032*(pt>250)) + \
@@ -4047,7 +4491,217 @@ module TauTagging TauTaggingPUPPI {
                              }
 }
 
-module TauTagging TauTaggingPUPPIAK8 {
+
+module TauTagging TauTaggingPUPPIDNNMedium {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScalePUPPI/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 1
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.011) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.007) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.021) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.010) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.006) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.026) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.018) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.012) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.008) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.004) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.028) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.020) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.014) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.009) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.031) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.025) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.018) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.013) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.009) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.009)
+                                 
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.643) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.800) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.846) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.877) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.928) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.940) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.953) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.953) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.634) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.795) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.837) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.876) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.910) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.929) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.973) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.973) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.625) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.777) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.821) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.857) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.869) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.864) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.838) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.838) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.653) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.793) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.829) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.871) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.876) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.869) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.856) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.856) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.638) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.754) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.791) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.846) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.860) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.850) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.778) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.778)
+                           }
+
+}
+
+
+
+module TauTagging TauTaggingPUPPIDNNTight {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScalePUPPI/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 2
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.002) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.002)
+                             }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.402) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.560) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.646) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.711) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.761) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.775) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.860) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.860) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.379) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.518) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.606) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.693) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.728) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.770) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.818) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.818) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.339) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.409) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.493) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.610) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.659) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.678) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.631) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.631) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.396) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.450) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.510) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.627) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.681) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.705) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.644) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.644) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.364) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.392) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.445) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.579) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.621) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.627) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.622) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.622)
+                           }
+
+}
+
+
+
+module TauTagging TauTaggingPUPPIAK8CutBased {
   set ParticleInputArray Delphes/allParticles
   set PartonInputArray Delphes/partons
   set JetInputArray JetEnergyScalePUPPIAK8/jets
@@ -4058,14 +4712,217 @@ module TauTagging TauTaggingPUPPIAK8 {
 
   set TauEtaMax 2.3
 
+  set BitNumber 0
+
   # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
 
-  add EfficiencyFormula {0}  { (abs(eta) < 2.3) * ((( -0.00621816+0.00130097*pt-2.19642e-5*pt^2+1.49393e-7*pt^3-4.58972e-10*pt^4+5.27983e-13*pt^5 )) * (pt<250) + 0.0032*(pt>250)) + \
-                               (abs(eta) > 2.3) * (0.000)
+
+}
+
+module TauTagging TauTaggingPUPPIAK8DNNMedium {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScalePUPPIAK8/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 1
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.011) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.007) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.021) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.023) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.015) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.010) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.006) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.004) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.026) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.018) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.012) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.008) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.004) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.004) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.028) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.020) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.014) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.009) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.006) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.022) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.031) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.025) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.018) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.013) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.009) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.009)
+                                 
                              }
-  add EfficiencyFormula {15} { (abs(eta) < 2.3) * 0.97*0.77*( (0.32 + 0.01*pt - 0.000054*pt*pt )*(pt<100)+0.78*(pt>100) ) + \
-                               (abs(eta) > 2.3) * (0.000)
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.643) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.800) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.846) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.877) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.928) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.940) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.953) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.953) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.634) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.795) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.837) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.876) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.910) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.929) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.973) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.973) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.625) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.777) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.821) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.857) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.869) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.864) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.838) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.838) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.653) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.793) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.829) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.871) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.876) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.869) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.856) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.856) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.638) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.754) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.791) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.846) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.860) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.850) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.778) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.778)
+                           }
+
+
+}
+
+module TauTagging TauTaggingPUPPIAK8DNNTight {
+  set ParticleInputArray Delphes/allParticles
+  set PartonInputArray Delphes/partons
+  set JetInputArray JetEnergyScalePUPPIAK8/jets
+
+  set DeltaR 0.5
+
+  set TauPTMin 20.0
+
+  set TauEtaMax 3.0
+
+  set BitNumber 2
+
+  # add EfficiencyFormula {abs(PDG code)} {efficiency formula as a function of eta and pt}
+  add EfficiencyFormula {0} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.001) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.002) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.001) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.002) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)                 * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.0005) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.001) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.002) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.003) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.002)
                              }
+
+  add EfficiencyFormula {15} { 
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  20.00 && pt <=  30.00) * (0.402) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  30.00 && pt <=  40.00) * (0.560) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  40.00 && pt <=  60.00) * (0.646) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  60.00 && pt <=  80.00) * (0.711) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt >  80.00 && pt <= 100.00) * (0.761) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 100.00 && pt <= 150.00) * (0.775) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 150.00 && pt <= 200.00) * (0.860) +
+                                  (abs(eta) > 0.00 && abs(eta) <= 0.50) * (pt > 200.00)                 * (0.860) + 
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  20.00 && pt <=  30.00) * (0.379) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  30.00 && pt <=  40.00) * (0.518) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  40.00 && pt <=  60.00) * (0.606) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  60.00 && pt <=  80.00) * (0.693) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt >  80.00 && pt <= 100.00) * (0.728) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 100.00 && pt <= 150.00) * (0.770) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 150.00 && pt <= 200.00) * (0.818) +
+                                  (abs(eta) > 0.50 && abs(eta) <= 1.00) * (pt > 200.00)                 * (0.818) + 
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  20.00 && pt <=  30.00) * (0.339) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  30.00 && pt <=  40.00) * (0.409) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  40.00 && pt <=  60.00) * (0.493) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  60.00 && pt <=  80.00) * (0.610) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt >  80.00 && pt <= 100.00) * (0.659) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 100.00 && pt <= 150.00) * (0.678) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 150.00 && pt <= 200.00) * (0.631) +
+                                  (abs(eta) > 1.00 && abs(eta) <= 1.60) * (pt > 200.00)                 * (0.631) + 
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  20.00 && pt <=  30.00) * (0.396) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  30.00 && pt <=  40.00) * (0.450) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  40.00 && pt <=  60.00) * (0.510) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  60.00 && pt <=  80.00) * (0.627) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt >  80.00 && pt <= 100.00) * (0.681) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 100.00 && pt <= 150.00) * (0.705) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 150.00 && pt <= 200.00) * (0.644) +
+                                  (abs(eta) > 1.60 && abs(eta) <= 2.10) * (pt > 200.00)  	        * (0.644) + 
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  20.00 && pt <=  30.00) * (0.364) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  30.00 && pt <=  40.00) * (0.392) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  40.00 && pt <=  60.00) * (0.445) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  60.00 && pt <=  80.00) * (0.579) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt >  80.00 && pt <= 100.00) * (0.621) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 100.00 && pt <= 150.00) * (0.627) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 150.00 && pt <= 200.00) * (0.622) +
+                                  (abs(eta) > 2.10 && abs(eta) <= 3.00) * (pt > 200.00)                 * (0.622)
+                           }
+
 }
 
 
@@ -4079,6 +4936,37 @@ module StatusPidFilter GenParticleFilter {
     set OutputArray filteredParticles
     set PTMin 0.0
 
+}
+
+#######################
+### Image Producers ###
+#######################
+
+module ImageProducer ImageProducerGenParticle {
+    set nPixelEta 20
+    set etaMin -5.
+    set etaMax +5.
+    set nPixelPhi 12
+    set filename GenPartImages.root
+    set InputArray GenParticleFilter/filteredParticles
+}
+
+module ImageProducer ImageProducerCalo {
+    set nPixelEta 20
+    set etaMin -5.
+    set etaMax +5.
+    set nPixelPhi 12
+    set filename CaloImages.root
+    set InputArray TowerMerger/towers
+}
+
+module ImageProducer ImageProducerPUPPI {
+    set nPixelEta 20
+    set etaMin -5.
+    set etaMax +5.
+    set nPixelPhi 12
+    set filename PUPPIImages.root
+    set InputArray RunPUPPI/PuppiParticles
 }
 
 
